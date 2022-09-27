@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 import math
 # Entropic Open-set loss
-class Entropic_Open_set_Loss():
+class EntropicOpenSetLoss():
     def __init__(self, class_names):
         self.class_num = len(class_names)
         self.Cross_entropy = nn.CrossEntropyLoss()

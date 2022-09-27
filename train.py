@@ -7,7 +7,7 @@ import argparse
 from torch import nn
 from dataset import CustomDataset
 from model import mobilenet_v2
-from loss import Entropic_Open_set_Loss
+from loss import EntropicOpenSetLoss
 import numpy as np
 from PIL import Image
 def parser():
@@ -216,7 +216,7 @@ if __name__ == "__main__":
         epoch = 0
     #open set loss
     if args.no_background is False:
-        criterion = Entropic_Open_set_Loss(class_names)
+        criterion = EntropicOpenSetLoss(class_names)
     else:
         criterion = nn.CrossEntropyLoss()
     
