@@ -1,0 +1,12 @@
+flatbuffers
+protobuf
+six
+tensorboard
+scipy
+protobuf
+requests
+flatbuffers
+packaging
+python-dateutil
+colorama==0.4.3
+PyYAML==5.3
