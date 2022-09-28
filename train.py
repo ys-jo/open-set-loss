@@ -45,7 +45,7 @@ def parser():
     parser.add_argument('--optimizer', default='adam',
                         choices=['adam', 'sgd', 'adamw'],
                         type=str.lower, help='Use Optimizer')
-    parser.add_argument('--input_size', default=[160,160], type=int,nargs=2,
+    parser.add_argument('--input_size', default=[256,256], type=int,nargs=2,
                         help='input size(width, height)')
     parser.add_argument('--no_background', default=False, action='store_true',
                         help='Use background dataset')
@@ -80,8 +80,10 @@ def load_model(model, source, optimizer=None, eval=0):
 
 
 def save_model(model, epoch, loss, optimizer, path='./checkpoints', postfix="mobilenetV2", cuda=False):
-
-    target = os.path.join(path, postfix + "_"+ str(epoch) +'.pth')
+    if postfix == "best":
+        target = os.path.join(path, postfix +'.pth')
+    else:
+        target = os.path.join(path, postfix + "_"+ str(epoch) +'.pth')
 
     if not os.path.isdir(path):
         os.makedirs(path)
@@ -140,10 +142,10 @@ if __name__ == "__main__":
     """
 
     t = [transforms.Resize((args.input_size[1], args.input_size[0])),
-        rgbtor(),
+        #rgbtor(),
         transforms.ToTensor(),
-        transforms.Normalize(0.5,0.5)]
-        # transforms.Normalize(args.mean, args.std)]
+        # transforms.Normalize(0.5,0.5)]
+        transforms.Normalize(args.mean, args.std)]
     t = transforms.Compose(t)
     train_dataset = CustomDataset(data_set_path=args.train_dataset_root, transforms=t)
     test_dataset = CustomDataset(data_set_path=args.validation_dataset_root, transforms=t)
@@ -222,6 +224,7 @@ if __name__ == "__main__":
     
 
     # 모델 학습 & 추론
+    best_score = 0
     model.train()
     cnt = 0
     total_cnt = len(train_dataset)
@@ -251,8 +254,10 @@ if __name__ == "__main__":
         if epoch != 0 and epoch % 5 == 0:
             model.eval()    # 평가시에는 dropout이 OFF 된다.
             correct = 0
-            no = 0
+            background_correct_num = 0
             wrong = 0
+            background_num = 0
+            total = 0
             for data, target in test_loader:
                 if torch.cuda.is_available():
                     data = data.to(device)
@@ -263,21 +268,33 @@ if __name__ == "__main__":
                     if args.no_background is False:
                         if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
                             correct += 1
-                            no +=1
+                            background_num +=1
+                            background_correct_num +=1
                         elif target[i] == len(class_names)-1:
-                            wrong +=1        
-                        elif torch.max(output[i]) < 0.5:
-                            pass
+                            wrong +=1 
+                            background_num += 1      
                         else:
-                            correct += torch.argmax(output[i]).eq(target[i])
+                            if torch.argmax(output[i]).eq(target[i]):
+                                correct += torch.argmax(output[i]).eq(target[i])
+                            else:
+                                wrong += 1
+                        total += 1
                     else:
                         correct += torch.argmax(output[i]).eq(target[i])
+                        total += 1
 
             if args.no_background is False:
-                print("wrong: ", wrong)
-                print("Background num: ",no)
-            print('Test set Accuracy : {:.2f}%'.format(100. * correct / len(test_loader.dataset)))
-            print('Test set Accuracy without background : {:.2f}%'.format(100. * (correct-no) / (len(test_loader.dataset)-wrong-no)))
+                print("total_wrong: ", wrong)
+                print("total_correct: ", correct)
+                print("Background num: ",background_num)
+                print("Background correct num: ",background_correct_num)
+                print('Test set Accuracy without background : {:.2f}%'.format(100. * (correct-background_correct_num) / (total-background_num)))
+            print('Test set Accuracy : {:.2f}%'.format(100. * correct / total))
+            score = 100. * correct / total
+            #save best weight
+            if best_score < score:
+                best_score = score
+                save_model(model=model, epoch=epoch, loss=loss, optimizer=optimizer, postfix="best", cuda=is_cuda)
             model.train()
         
     print("Done")

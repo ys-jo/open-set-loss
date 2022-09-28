@@ -25,7 +25,7 @@ def parser():
                         help='std for normalizing')
     parser.add_argument('--weight', default=None,
                         help='Weight file path')
-    parser.add_argument('--input_size', default=[160,160], type=int, nargs=2,
+    parser.add_argument('--input_size', default=[256,256], type=int, nargs=2,
                         help='input size (width, height)')
     parser.add_argument('--no_background', default=False, action='store_true',
                         help='Use background dataset')
