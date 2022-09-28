@@ -42,7 +42,7 @@ def parser():
     parser.add_argument('--scheduler', default='plateau',
                         choices=['plateau','step', 'multi_step','cosine'],
                         type=str.lower, help='Use Scheduler')
-    parser.add_argument('--optimizer', default='adam',
+    parser.add_argument('--optimizer', default='adamw',
                         choices=['adam', 'sgd', 'adamw'],
                         type=str.lower, help='Use Optimizer')
     parser.add_argument('--input_size', default=[256,256], type=int,nargs=2,
@@ -241,7 +241,7 @@ if __name__ == "__main__":
             optimizer.step()
             cnt +=  args.batch_size
             print("[%d / %d] - loss=%.3f" % (cnt, total_cnt, loss), end='\r')
-        print("Train epoch : {}\tLoss : {:3f}".format(epoch, loss.item()))
+        print("Train epoch : {}     Loss : {:3f}".format(epoch, loss.item()))
         save_model(model=model, epoch=epoch, loss=loss, optimizer=optimizer, cuda=is_cuda)
         cnt = 0
         #scheduler

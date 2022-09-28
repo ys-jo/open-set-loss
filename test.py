@@ -78,7 +78,7 @@ def export_classificaton_model(size, model):
     w = size[0]
     h = size[1]
 
-    x = torch.rand(1, 1, h, w)
+    x = torch.rand(1, 3, h, w)
 
     if torch.cuda.is_available():
         x = x.cuda()
@@ -133,10 +133,10 @@ if __name__ == "__main__":
         raise Exception("There is no dataset_root dir") 
 
     t = [transforms.Resize((args.input_size[1], args.input_size[0])),
-        rgbtor(),
+        #rgbtor(),
         transforms.ToTensor(),
-        transforms.Normalize(0.5,0.5)]
-        # transforms.Normalize(args.mean, args.std)]
+        #transforms.Normalize(0.5,0.5)]
+        transforms.Normalize(args.mean, args.std)]
     t = transforms.Compose(t)
     test_dataset = CustomDataset(data_set_path=args.dataset_root, transforms=t)
     class_names = os.walk(args.dataset_root).__next__()[1]
@@ -150,14 +150,13 @@ if __name__ == "__main__":
             raise Exception("There is no background dataset")
 
     # prepare model
-    if args.no_background is False:
-        model = prepare_model(args,class_numes = len(class_names)-1)
-    else:
-        model = prepare_model(args,class_numes = len(class_names))
+    #if args.no_background is False:
+    model = prepare_model(args,class_numes = len(class_names)-1)
+    #else:
+    #    model = prepare_model(args,class_numes = len(class_names))
     if args.export:
         export_classificaton_model(args.input_size, model)
 
-    
     print('number of test data : ', len(test_dataset))
     # data loader
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
@@ -170,36 +169,39 @@ if __name__ == "__main__":
     #모델 평가
     model.eval()    # 평가시에는 dropout이 OFF 된다.
     correct = 0
-    no = 0
+    background_correct_num = 0
     wrong = 0
+    background_num = 0
+    total = 0
     for data, target in test_loader:
         if torch.cuda.is_available():
             data = data.to(device)
             target = target.to(device)
         output = model(data)
         prediction = torch.max(output[0])
-        # print(prediction)
-        # print("target", target)
         for i in range(args.batch_size):
-            # print(output[i])
-            # print(target[i])
             if args.no_background is False:
-                if torch.max(output[i]) < 0.6 and target[i] == len(class_names)-1:
+                if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
                     correct += 1
-                    no +=1
+                    background_num +=1
+                    background_correct_num +=1
                 elif target[i] == len(class_names)-1:
                     wrong +=1 
-                elif torch.max(output[i]) < 0.6:
-                    pass
+                    background_num += 1      
                 else:
-                    correct += torch.argmax(output[i]).eq(target[i])
+                    if torch.argmax(output[i]).eq(target[i]):
+                        correct += torch.argmax(output[i]).eq(target[i])
+                    else:
+                        wrong += 1
+                total += 1
             else:
-                print(torch.argmax(output[i]))
                 correct += torch.argmax(output[i]).eq(target[i])
-                # correct += output[i].eq(target[i])
+                total += 1
 
     if args.no_background is False:
-        print("wrong: ", wrong)
-        print("Background num: ",no)
-    print('Test set Accuracy : {:.2f}%'.format(100. * correct / len(test_loader.dataset)))
-    print('Test set Accuracy without background : {:.2f}%'.format(100. * (correct-no) / (len(test_loader.dataset)-wrong-no)))
+        print("total_wrong: ", wrong)
+        print("total_correct: ", correct)
+        print("Background num: ",background_num)
+        print("Background correct num: ",background_correct_num)
+        print('Test set Accuracy without background : {:.2f}%'.format(100. * (correct-background_correct_num) / (total-background_num)))
+    print('Test set Accuracy : {:.2f}%'.format(100. * correct / total))
