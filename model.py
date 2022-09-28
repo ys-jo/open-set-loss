@@ -222,7 +222,10 @@ def mobilenet_v2(pretrained: bool = True, progress: bool = True, **kwargs: Any) 
     model = MobileNetV2(**kwargs)
     if pretrained:
         print("Use pretrained model!")
-        state_dict = load_state_dict_from_url(model_urls['mobilenet_v2'],
-                                              progress=progress)
-        model.on_load_checkpoint(state_dict)
+        try:
+            state_dict = load_state_dict_from_url(model_urls['mobilenet_v2'],
+                                                progress=progress)
+            model.load_state_dict(state_dict, strict=False)
+        except RuntimeError as e:
+            print(f"ignore : {str(e)}")
     return model

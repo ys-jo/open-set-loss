@@ -167,10 +167,10 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                             batch_size = args.batch_size, drop_last=True, shuffle = True, num_workers=args.num_workers)
 
-    if args.no_background is False:
-        model = mobilenet_v2(custom_class_num = len(class_names) - 1)
-    else:
-        model = mobilenet_v2(custom_class_num = len(class_names))
+    #if args.no_background is False:
+    model = mobilenet_v2(custom_class_num = len(class_names) - 1)
+    #else:
+    #    model = mobilenet_v2(custom_class_num = len(class_names) - 1)
     if torch.cuda.is_available():
         model = model.to(device)
         model = torch.nn.DataParallel(model)
