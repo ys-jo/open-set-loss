@@ -10,6 +10,7 @@ from model import mobilenet_v2
 from loss import EntropicOpenSetLoss
 import numpy as np
 from PIL import Image
+from adamp import SGDP
 def parser():
     parser = argparse.ArgumentParser(description='Classification Training')
 
@@ -37,13 +38,13 @@ def parser():
                         help='Gamma update for SGD')
     parser.add_argument('--step_size', default=70, type=int,
                         help='Step size for step lr scheduler')
-    parser.add_argument('--milestones', default=[110, 150], type=int, nargs='*',
+    parser.add_argument('--milestones', default=[60, 80], type=int, nargs='*',
                         help='Milestones for multi step lr scheduler')
-    parser.add_argument('--scheduler', default='plateau',
+    parser.add_argument('--scheduler', default='cosine',
                         choices=['plateau','step', 'multi_step','cosine'],
                         type=str.lower, help='Use Scheduler')
     parser.add_argument('--optimizer', default='adamw',
-                        choices=['adam', 'sgd', 'adamw'],
+                        choices=['adam', 'sgd', 'adamw', 'sgdp'],
                         type=str.lower, help='Use Optimizer')
     parser.add_argument('--input_size', default=[256,256], type=int,nargs=2,
                         help='input size(width, height)')
@@ -187,6 +188,8 @@ if __name__ == "__main__":
                         weight_decay=args.weight_decay)
     elif args.optimizer == "adamw":
         optimizer = AdamW(model.parameters(), lr = args.lr)
+    elif args.optimizer == "sgdp":
+        optimizer = SGDP(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.momentum, nesterov=True)
     else:
         raise Exception("unknown optimizer")
 

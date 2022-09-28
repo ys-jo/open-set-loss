@@ -11,11 +11,11 @@ class EntropicOpenSetLoss():
 
     def __call__(self, output, target_batch):
         output_softmax = F.softmax(output, dim=1)
+        div = 1/(self.class_num-1)
         loss = 0
         for i, target in enumerate(target_batch):
             if target == self.class_num - 1:
                 # background class
-                div = 1/(self.class_num-1)
                 for index in range(self.class_num - 1):
                     loss -= torch.log(output_softmax[i][index]) * div
             else:
