@@ -257,8 +257,8 @@ if __name__ == "__main__":
     print("========배경클래스 포함 정확도 측정===============")
     if args.no_background is False:
         print("total_wrong: ", wrong)
-        print("total_correct: ", correct.detach().cpu())
-        print("Background num: ",background_num)
+        print("total_correct: ", int(correct.detach().cpu()))
+        print("Background num: ", background_num)
         print("Background correct num: ",background_correct_num)
         print('Test set Accuracy without background : {:.2f}%'.format(100. * (correct-background_correct_num) / (total-background_num)))
     print('Test set Accuracy : {:.2f}%'.format(100. * correct / total))
