@@ -4,6 +4,7 @@ from torchvision import  transforms
 import argparse
 from dataset import CustomDataset
 from model import mobilenet_v2
+from accuracy import Accuracy
 import numpy as np
 from PIL import Image
 def parser():
@@ -32,6 +33,9 @@ def parser():
     parser.add_argument('--export', default=False, 
                         action='store_true',
                         help='export onnx')
+    parser.add_argument('--topk', type=int,
+                        default=1,
+                        help='topk...')
     args = parser.parse_args()
     return args
 
@@ -166,6 +170,11 @@ if __name__ == "__main__":
         model = model.to(device)
         model = torch.nn.DataParallel(model)
 
+    metric = Accuracy(topk=args.topk, remove = len(class_names)-1, no_background = args.no_background)
+    metric.reset()
+    topk = args.topk
+    remainder = len(test_dataset)%args.batch_size
+
     #모델 평가
     model.eval()    # 평가시에는 dropout이 OFF 된다.
     correct = 0
@@ -173,34 +182,82 @@ if __name__ == "__main__":
     wrong = 0
     background_num = 0
     total = 0
+    if not args.no_background:
+        class_correct = list(0. for i in range(len(class_names) - 1))
+        class_total = list(0. for i in range(len(class_names) - 1))
+    else:
+        class_correct = list(0. for i in range(len(class_names)))
+        class_total = list(0. for i in range(len(class_names)))        
     for data, target in test_loader:
         if torch.cuda.is_available():
             data = data.to(device)
             target = target.to(device)
         output = model(data)
-        prediction = torch.max(output[0])
-        for i in range(args.batch_size):
-            if args.no_background is False:
-                if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
-                    correct += 1
-                    background_num +=1
-                    background_correct_num +=1
-                elif target[i] == len(class_names)-1:
-                    wrong +=1 
-                    background_num += 1      
-                else:
-                    if torch.argmax(output[i]).eq(target[i]):
-                        correct += torch.argmax(output[i]).eq(target[i])
+        pred = torch.exp(output)
+        top_prob, top_class = pred.topk(topk, 1)
+        target_ = target.unsqueeze(1).expand_as(top_class)
+        c = (top_class == target_).squeeze()
+        #prediction = torch.max(output[0])
+        if (len(target) < args.batch_size):
+            for i in remainder:
+                if args.no_background is False:
+                    if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
+                        correct += 1
+                        background_num +=1
+                        background_correct_num +=1
+                    elif target[i] == len(class_names)-1:
+                        wrong +=1 
+                        background_num += 1      
                     else:
-                        wrong += 1
-                total += 1
-            else:
-                correct += torch.argmax(output[i]).eq(target[i])
-                total += 1
+                        if torch.argmax(output[i]).eq(target[i]):
+                            correct += torch.argmax(output[i]).eq(target[i])
+                            class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                        else:
+                            wrong += 1
+                    class_total[target[i]] += 1
+                    total += 1
+                else:
+                    correct += torch.argmax(output[i]).eq(target[i])
+                    class_total[target[i]] += 1
+                    class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                    total += 1
+        else:
+            for i in range(args.batch_size):
+                if args.no_background is False:
+                    if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
+                        correct += 1
+                        background_num +=1
+                        background_correct_num +=1
+                    elif target[i] == len(class_names)-1:
+                        wrong +=1 
+                        background_num += 1      
+                    else:
+                        if torch.argmax(output[i]).eq(target[i]):
+                            correct += torch.argmax(output[i]).eq(target[i])
+                            class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                        else:
+                            wrong += 1
+                        class_total[target[i]] += 1
+                    total += 1
+                else:
+                    correct += torch.argmax(output[i]).eq(target[i])
+                    class_total[target[i]] += 1
+                    class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                    total += 1
+        metric.match(model(data), target)
+    accuracy = metric.get_result()
+    # print results
+    print("==================================================")
+    print("========배경클래스 없이 정확도 측정===============")
+    print("accuracy (without background class) = %.3f %%" % accuracy)
+    for i in range(len(class_names)-1):
+        print('Accuracy of %s: %.3f %%' % (class_names[i], 100 * class_correct[i] / class_total[i]))
 
+    print("==================================================")
+    print("========배경클래스 포함 정확도 측정===============")
     if args.no_background is False:
         print("total_wrong: ", wrong)
-        print("total_correct: ", correct)
+        print("total_correct: ", correct.detach().cpu())
         print("Background num: ",background_num)
         print("Background correct num: ",background_correct_num)
         print('Test set Accuracy without background : {:.2f}%'.format(100. * (correct-background_correct_num) / (total-background_num)))
