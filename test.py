@@ -154,10 +154,10 @@ if __name__ == "__main__":
             raise Exception("There is no background dataset")
 
     # prepare model
-    #if args.no_background is False:
-    model = prepare_model(args,class_numes = len(class_names)-1)
-    #else:
-    #    model = prepare_model(args,class_numes = len(class_names))
+    if args.no_background is False:
+        model = prepare_model(args,class_numes = len(class_names)-1)
+    else:
+        model = prepare_model(args,class_numes = len(class_names))
     if args.export:
         export_classificaton_model(args.input_size, model)
 
