@@ -11,6 +11,7 @@ from loss import EntropicOpenSetLoss
 import numpy as np
 from PIL import Image
 from adamp import SGDP
+import torch.nn.functional as F
 def parser():
     parser = argparse.ArgumentParser(description='Classification Training')
 
@@ -45,6 +46,9 @@ def parser():
                         type=str.lower, help='Use Scheduler')
     parser.add_argument('--optimizer', default='adamw',
                         choices=['adam', 'sgd', 'adamw', 'sgdp'],
+                        type=str.lower, help='Use Optimizer')
+    parser.add_argument('--loss', default='open',
+                        choices=['open', 'ce', 'mse'],
                         type=str.lower, help='Use Optimizer')
     parser.add_argument('--input_size', default=[256,256], type=int,nargs=2,
                         help='input size(width, height)')
@@ -170,10 +174,10 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                             batch_size = args.batch_size, drop_last=True, shuffle = True, num_workers=args.num_workers)
 
-    #if args.no_background is False:
-    model = mobilenet_v2(custom_class_num = len(class_names) - 1)
-    #else:
-    #    model = mobilenet_v2(custom_class_num = len(class_names) - 1)
+    if args.no_background is False:
+        model = mobilenet_v2(custom_class_num = len(class_names) - 1)
+    else:
+        model = mobilenet_v2(custom_class_num = len(class_names))
     if torch.cuda.is_available():
         model = model.to(device)
         model = torch.nn.DataParallel(model)
@@ -220,11 +224,15 @@ if __name__ == "__main__":
     else:
         epoch = 0
     #open set loss
-    if args.no_background is False:
+    if args.no_background is False and args.loss == 'open':
+        print("Use open-set Loss")
         criterion = EntropicOpenSetLoss(class_names)
-    else:
+    elif args.loss == 'ce':
+        print("Use CE Loss")
         criterion = nn.CrossEntropyLoss()
-    
+    else:
+        print("Use MSE Loss")
+        criterion = nn.MSELoss()    
 
     # 모델 학습 & 추론
     best_score = 0
@@ -238,8 +246,10 @@ if __name__ == "__main__":
                 target = target.to(device)
             optimizer.zero_grad()
             output = model(data)
-            loss = criterion(output, target)
-            # print("aaa",loss)
+            if args.loss == 'mse':
+                #one-hot encoding
+                target = F.one_hot(target,len(class_names))
+            loss = criterion(output.to(torch.float32), target.to(torch.float32))
             loss.backward()
             optimizer.step()
             cnt +=  args.batch_size
