@@ -39,18 +39,18 @@ def parser():
                         help='Gamma update for SGD')
     parser.add_argument('--step_size', default=70, type=int,
                         help='Step size for step lr scheduler')
-    parser.add_argument('--milestones', default=[60, 80], type=int, nargs='*',
+    parser.add_argument('--milestones', default=[20], type=int, nargs='*',
                         help='Milestones for multi step lr scheduler')
-    parser.add_argument('--scheduler', default='cosine',
+    parser.add_argument('--scheduler', default='multi_step',
                         choices=['plateau','step', 'multi_step','cosine'],
                         type=str.lower, help='Use Scheduler')
-    parser.add_argument('--optimizer', default='adamw',
+    parser.add_argument('--optimizer', default='sgd',
                         choices=['adam', 'sgd', 'adamw', 'sgdp'],
                         type=str.lower, help='Use Optimizer')
     parser.add_argument('--loss', default='open',
                         choices=['open', 'ce', 'mse'],
                         type=str.lower, help='Use Optimizer')
-    parser.add_argument('--input_size', default=[256,256], type=int,nargs=2,
+    parser.add_argument('--input_size', default=[192,192], type=int,nargs=2,
                         help='input size(width, height)')
     parser.add_argument('--no_background', default=False, action='store_true',
                         help='Use background dataset')
@@ -249,7 +249,9 @@ if __name__ == "__main__":
             if args.loss == 'mse':
                 #one-hot encoding
                 target = F.one_hot(target,len(class_names))
-            loss = criterion(output.to(torch.float32), target.to(torch.float32))
+                loss = criterion(output.to(torch.float32), target.to(torch.float32))
+            else:
+                loss = criterion(output, target)
             loss.backward()
             optimizer.step()
             cnt +=  args.batch_size
