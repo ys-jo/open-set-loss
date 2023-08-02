@@ -9,7 +9,10 @@ from torch import nn, Tensor
 from torchvision.ops import StochasticDepth
 
 from misc import Conv2dNormActivation, SqueezeExcitation
-
+try:
+    from torch.hub import load_state_dict_from_url
+except ImportError:
+    from torch.utils.model_zoo import load_url as load_state_dict_from_url
 
 def _make_divisible(v: float, divisor: int, min_value: Optional[int] = None) -> int:
     """
@@ -222,6 +225,7 @@ class FusedMBConv(nn.Module):
 
 
 class EfficientNet(nn.Module):
+    name = 'efficientnet'
     def __init__(
         self,
         inverted_residual_setting: Sequence[Union[MBConvConfig, FusedMBConvConfig]],
@@ -340,11 +344,17 @@ def _efficientnet(
     inverted_residual_setting: Sequence[Union[MBConvConfig, FusedMBConvConfig]],
     last_channel: Optional[int],
     custom_class_num: Optional[int],
+    url: Optional[str],
     **kwargs: Any,
 ) -> EfficientNet:
 
     model = EfficientNet(inverted_residual_setting, 0.2, last_channel=last_channel,num_classes = custom_class_num, **kwargs)
-
+    try:
+        state_dict = load_state_dict_from_url(url,
+                                            progress=True)
+        model.load_state_dict(state_dict, strict=False)
+    except RuntimeError as e:
+        print(f"ignore : {str(e)}")
     return model
 
 
@@ -412,7 +422,8 @@ def efficientnet_b0(custom_class_num) -> EfficientNet:
     return _efficientnet(
         inverted_residual_setting, 
         last_channel,
-        custom_class_num
+        custom_class_num,
+        "https://download.pytorch.org/models/efficientnet_b0_rwightman-3dd342df.pth",
     )
 
 
@@ -425,7 +436,8 @@ def efficientnet_b1(custom_class_num) -> EfficientNet:
     return _efficientnet(
         inverted_residual_setting,
         last_channel,
-        custom_class_num
+        custom_class_num,
+        "https://download.pytorch.org/models/efficientnet_b1-c27df63c.pth",
     )
 
 
@@ -438,7 +450,8 @@ def efficientnet_b2(custom_class_num) -> EfficientNet:
     return _efficientnet(
         inverted_residual_setting, 
         last_channel,
-        custom_class_num
+        custom_class_num,
+        "https://download.pytorch.org/models/efficientnet_b2_rwightman-bcdf34b7.pth",
     )
 
 
@@ -451,7 +464,8 @@ def efficientnet_b3(custom_class_num) -> EfficientNet:
     return _efficientnet(
         inverted_residual_setting,
         last_channel,
-        custom_class_num
+        custom_class_num,
+        "https://download.pytorch.org/models/efficientnet_b3_rwightman-cf984f9c.pth",
     )
 
 

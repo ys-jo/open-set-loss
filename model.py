@@ -157,7 +157,7 @@ class MobileNetV2(nn.Module):
         # building first layer
         input_channel = _make_divisible(input_channel * width_mult, round_nearest)
         self.last_channel = _make_divisible(last_channel * max(1.0, width_mult), round_nearest)
-        features: List[nn.Module] = [ConvBNReLU(3, input_channel, stride=2, norm_layer=norm_layer)]
+        features: List[nn.Module] = [ConvBNReLU(1, input_channel, stride=2, norm_layer=norm_layer)]
         # building inverted residual blocks
         for t, c, n, s in inverted_residual_setting:
             output_channel = _make_divisible(c * width_mult, round_nearest)

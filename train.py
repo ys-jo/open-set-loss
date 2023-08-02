@@ -262,7 +262,7 @@ if __name__ == "__main__":
             cnt +=  args.batch_size
             print("[%d / %d] - loss=%.3f" % (cnt, total_cnt, loss), end='\r')
         print("Train epoch : {}     Loss : {:3f}".format(epoch, loss.item()))
-        save_model(model=model, epoch=epoch, loss=loss, optimizer=optimizer, cuda=is_cuda)
+        save_model(model=model, epoch=epoch, loss=loss, optimizer=optimizer, postfix= args.model, cuda=is_cuda)
         cnt = 0
         #scheduler
         if scheduler is not None:

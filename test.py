@@ -4,12 +4,13 @@ from torchvision import  transforms
 import argparse
 from dataset import CustomDataset
 from model import mobilenet_v2
+from efficientnet import efficientnet_b0, efficientnet_b1
 from accuracy import Accuracy
 import numpy as np
 from PIL import Image
 def parser():
     parser = argparse.ArgumentParser(description='evaluate network')
-    parser.add_argument('--model', default='mobilenetv2',choices=['mobilenetv2'],
+    parser.add_argument('--model', default='efficientnet-b0',choices=['mobilenetv2','efficientnet-b0', 'efficientnet-b1'],
                         help='Detector model name')
     parser.add_argument('--dataset_root', default=None, type=str,
                         help='Dataset root directory path')
@@ -34,14 +35,6 @@ def parser():
     return args
 
 
-def build_model(args, custom_class_num=None):
-    model = args.model.lower()
-
-    if model.startswith('mobilenetv2'):
-        return mobilenet_v2(custom_class_num=custom_class_num)
-
-    raise Exception("unknown model %s" % args.model)
-
 
 def load_model(model, source, optimizer=None, eval=0):
     if not os.path.isfile(source):
@@ -60,19 +53,7 @@ def load_model(model, source, optimizer=None, eval=0):
     return epoch, loss
 
 
-def prepare_model(args, class_numes):
-    model = build_model(args, custom_class_num=class_numes)
-    print("class num:", class_numes)
-
-    _=load_model(model, source=args.weight, eval=1)
-
-    if torch.cuda.is_available():
-        model = model.cuda()
-
-    return model
-
-
-def export_classificaton_model(size, model):
+def export_classificaton_model(model_name, size, model):
     w = size[0]
     h = size[1]
 
@@ -80,7 +61,7 @@ def export_classificaton_model(size, model):
 
     if torch.cuda.is_available():
         x = x.cuda()
-    filename = model.name + '.onnx'
+    filename = model_name + '.onnx'
     print('dumping network to %s' % filename)
     torch.onnx.export(model, x, filename)
 
@@ -131,6 +112,7 @@ if __name__ == "__main__":
         raise Exception("There is no dataset_root dir") 
 
     t = [transforms.Resize((args.input_size[1], args.input_size[0])),
+         transforms.Grayscale(1),
         #rgbtor(),
         transforms.ToTensor(),
         transforms.Normalize(0.5,0.5)]
@@ -148,11 +130,27 @@ if __name__ == "__main__":
 
     # prepare model
     if args.no_background is False:
-        model = prepare_model(args,class_numes = len(class_names)-1)
+        if args.model == 'mobilenetv2':
+            model = mobilenet_v2(custom_class_num = len(class_names) - 1)
+        elif args.model == 'efficientnet-b0':
+            model = efficientnet_b0(custom_class_num = len(class_names) - 1)
+        elif args.model == 'efficientnet-b1':
+            model = efficientnet_b1(custom_class_num = len(class_names) - 1)
     else:
-        model = prepare_model(args,class_numes = len(class_names))
+        if args.model == 'mobilenetv2':
+            model = mobilenet_v2(custom_class_num = len(class_names))
+        elif args.model == 'efficientnet-b0':
+            model = efficientnet_b0(custom_class_num = len(class_names))
+        elif args.model == 'efficientnet-b1':
+            model = efficientnet_b1(custom_class_num = len(class_names))
+
+    _=load_model(model, source=args.weight, eval=1)
+
+    if torch.cuda.is_available():
+        model = model.cuda()
+    
     if args.export:
-        export_classificaton_model(args.input_size, model)
+        export_classificaton_model(args.model, args.input_size, model)
 
     print('number of test data : ', len(test_dataset))
     # data loader
