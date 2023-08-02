@@ -7,6 +7,7 @@ import argparse
 from torch import nn
 from dataset import CustomDataset
 from model import mobilenet_v2
+from efficientnet import efficientnet_b0, efficientnet_b1
 from loss import EntropicOpenSetLoss
 import numpy as np
 from PIL import Image
@@ -19,7 +20,7 @@ def parser():
                         help='train Dataset root directory path')
     parser.add_argument('--validation_dataset_root', default=None,
                         help='Validation Dataset root directory path')
-    parser.add_argument('--model', default='mobilenetv2',choices=['mobilenetv2'],
+    parser.add_argument('--model', default='efficientnet-b0',choices=['mobilenetv2','efficientnet-b0', 'efficientnet-b1'],
                         help='Detector model name')
     parser.add_argument('--batch_size', default=32, type=int,
                         help='Batch size for training')
@@ -44,7 +45,7 @@ def parser():
     parser.add_argument('--scheduler', default='multi_step',
                         choices=['plateau','step', 'multi_step','cosine'],
                         type=str.lower, help='Use Scheduler')
-    parser.add_argument('--optimizer', default='sgd',
+    parser.add_argument('--optimizer', default='adam',
                         choices=['adam', 'sgd', 'adamw', 'sgdp'],
                         type=str.lower, help='Use Optimizer')
     parser.add_argument('--loss', default='open',
@@ -55,13 +56,6 @@ def parser():
     parser.add_argument('--no_background', default=False, action='store_true',
                         help='Use background dataset')
 
-    # model parameter
-    parser.add_argument('--mean', nargs=3, type=float,
-                        default=(0.486, 0.456, 0.406),
-                        help='mean for normalizing')
-    parser.add_argument('--std', nargs=3, type=float,
-                        default=(0.229, 0.224, 0.225),
-                        help='std for normalizing')
 
     args = parser.parse_args()
     return args    
@@ -147,10 +141,10 @@ if __name__ == "__main__":
     """
 
     t = [transforms.Resize((args.input_size[1], args.input_size[0])),
+        transforms.Grayscale(1),
         #rgbtor(),
         transforms.ToTensor(),
-        # transforms.Normalize(0.5,0.5)]
-        transforms.Normalize(args.mean, args.std)]
+        transforms.Normalize(0.5,0.5)]
     t = transforms.Compose(t)
     train_dataset = CustomDataset(data_set_path=args.train_dataset_root, transforms=t)
     test_dataset = CustomDataset(data_set_path=args.validation_dataset_root, transforms=t)
@@ -175,9 +169,20 @@ if __name__ == "__main__":
                                             batch_size = args.batch_size, drop_last=True, shuffle = True, num_workers=args.num_workers)
 
     if args.no_background is False:
-        model = mobilenet_v2(custom_class_num = len(class_names) - 1)
+        if args.model == 'mobilenetv2':
+            model = mobilenet_v2(custom_class_num = len(class_names) - 1)
+        elif args.model == 'efficientnet-b0':
+            model = efficientnet_b0(custom_class_num = len(class_names) - 1)
+        elif args.model == 'efficientnet-b1':
+            model = efficientnet_b1(custom_class_num = len(class_names) - 1)
     else:
-        model = mobilenet_v2(custom_class_num = len(class_names))
+        if args.model == 'mobilenetv2':
+            model = mobilenet_v2(custom_class_num = len(class_names))
+        elif args.model == 'efficientnet-b0':
+            model = efficientnet_b0(custom_class_num = len(class_names))
+        elif args.model == 'efficientnet-b1':
+            model = efficientnet_b1(custom_class_num = len(class_names))
+
     if torch.cuda.is_available():
         model = model.to(device)
         model = torch.nn.DataParallel(model)
@@ -273,30 +278,31 @@ if __name__ == "__main__":
             wrong = 0
             background_num = 0
             total = 0
-            for data, target in test_loader:
-                if torch.cuda.is_available():
-                    data = data.to(device)
-                    target = target.to(device)
-                output = model(data)
-                prediction = torch.max(output[0])
-                for i in range(args.batch_size):
-                    if args.no_background is False:
-                        if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
-                            correct += 1
-                            background_num +=1
-                            background_correct_num +=1
-                        elif target[i] == len(class_names)-1:
-                            wrong +=1 
-                            background_num += 1      
-                        else:
-                            if torch.argmax(output[i]).eq(target[i]):
-                                correct += torch.argmax(output[i]).eq(target[i])
+            with torch.no_grad():
+                for data, target in test_loader:
+                    if torch.cuda.is_available():
+                        data = data.to(device)
+                        target = target.to(device)
+                    output = model(data)
+                    prediction = torch.max(output[0])
+                    for i in range(args.batch_size):
+                        if args.no_background is False:
+                            if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
+                                correct += 1
+                                background_num +=1
+                                background_correct_num +=1
+                            elif target[i] == len(class_names)-1:
+                                wrong +=1 
+                                background_num += 1      
                             else:
-                                wrong += 1
-                        total += 1
-                    else:
-                        correct += torch.argmax(output[i]).eq(target[i])
-                        total += 1
+                                if torch.argmax(output[i]).eq(target[i]):
+                                    correct += torch.argmax(output[i]).eq(target[i])
+                                else:
+                                    wrong += 1
+                            total += 1
+                        else:
+                            correct += torch.argmax(output[i]).eq(target[i])
+                            total += 1
 
             if args.no_background is False:
                 print("total_wrong: ", wrong)

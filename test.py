@@ -18,12 +18,6 @@ def parser():
     parser.add_argument('--num_workers', default=12, type=int,
                         help='Number of workers used in dataloading')  
     # model parameter
-    parser.add_argument('--mean', nargs=3, type=float,
-                        default=(0.486, 0.456, 0.406),
-                        help='mean for normalizing')
-    parser.add_argument('--std', nargs=3, type=float,
-                        default=(0.229, 0.224, 0.225),
-                        help='std for normalizing')
     parser.add_argument('--weight', default=None,
                         help='Weight file path')
     parser.add_argument('--input_size', default=[192,192], type=int, nargs=2,
@@ -82,7 +76,7 @@ def export_classificaton_model(size, model):
     w = size[0]
     h = size[1]
 
-    x = torch.rand(1, 3, h, w)
+    x = torch.rand(1, 1, h, w)
 
     if torch.cuda.is_available():
         x = x.cuda()
@@ -139,8 +133,7 @@ if __name__ == "__main__":
     t = [transforms.Resize((args.input_size[1], args.input_size[0])),
         #rgbtor(),
         transforms.ToTensor(),
-        #transforms.Normalize(0.5,0.5)]
-        transforms.Normalize(args.mean, args.std)]
+        transforms.Normalize(0.5,0.5)]
     t = transforms.Compose(t)
     test_dataset = CustomDataset(data_set_path=args.dataset_root, transforms=t)
     class_names = os.walk(args.dataset_root).__next__()[1]
