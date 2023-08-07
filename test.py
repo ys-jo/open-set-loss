@@ -8,6 +8,8 @@ from efficientnet import efficientnet_b0, efficientnet_b1
 from accuracy import Accuracy
 import numpy as np
 from PIL import Image
+import torchvision
+
 def parser():
     parser = argparse.ArgumentParser(description='evaluate network')
     parser.add_argument('--model', default='efficientnet-b0',choices=['mobilenetv2','efficientnet-b0', 'efficientnet-b1'],
@@ -31,10 +33,33 @@ def parser():
     parser.add_argument('--topk', type=int,
                         default=1,
                         help='topk...')
+    parser.add_argument('--onnx', default=None, type=str,
+                        help='Use onnxruntime')
+    parser.add_argument('--dx_sim', default=None, type=str,
+                        help='Use dx_sim')
+    parser.add_argument('--json', default=None, type=str,
+                        help='Use dx_sim')
     args = parser.parse_args()
     return args
 
 
+class ToNPUTensor:
+    def __call__(self, img):
+        img = np.array(img).astype(np.float32)
+        img = np.expand_dims(img, axis=0)
+        img = np.expand_dims(img, axis=0)
+
+        # transposed_img = np.transpose(img, (2, 0, 1))
+        return img
+    
+def create_simulator_input(img, preprocessor):
+    """Create input for simulator with using image file"""
+    pil_image = img.convert('RGB') 
+    open_cv_image = np.array(pil_image) 
+    # Convert RGB to BGR 
+    open_cv_image = open_cv_image[:, :, ::-1].copy() 
+    preprocessed = preprocessor(open_cv_image)
+    return preprocessed.astype(np.uint8)
 
 def load_model(model, source, optimizer=None, eval=0):
     if not os.path.isfile(source):
@@ -88,14 +113,16 @@ test/
     background/
         *.jpg
 """
-class rgbtor:
-    def __init__(self):
-        pass
+def collate(batch):
+    imgs = []
+    targets = []
 
-    def __call__(self, img):
-        r,g,b = img.split()
+    for (img, target) in batch:
+        imgs.append(img)
+        targets.append(target)
 
-        return r
+    return imgs[0], torch.tensor(targets)
+
 
 if __name__ == "__main__":
     args = parser()
@@ -103,21 +130,23 @@ if __name__ == "__main__":
     is_cuda = torch.cuda.is_available()
     device = torch.device('cuda' if is_cuda else 'cpu')
 
-    # load weight
-    if not args.weight:
-        raise Exception('You must enter weight path')
-
     # dataset_root check
     if not os.path.isdir(args.dataset_root):
         raise Exception("There is no dataset_root dir") 
-
-    t = [transforms.Resize((args.input_size[1], args.input_size[0])),
-         transforms.Grayscale(1),
-        #rgbtor(),
-        transforms.ToTensor(),
-        transforms.Normalize(0.5,0.5)]
-    t = transforms.Compose(t)
-    test_dataset = CustomDataset(data_set_path=args.dataset_root, transforms=t)
+    if args.dx_sim:
+        t = [transforms.Resize((args.input_size[1], args.input_size[0])),
+            transforms.Grayscale(1),
+            ToNPUTensor()]
+    
+        t = transforms.Compose(t)
+        test_dataset = CustomDataset(data_set_path=args.dataset_root, transforms=t)
+    else:
+        t = [transforms.Resize((args.input_size[1], args.input_size[0])),
+            transforms.Grayscale(1),
+            transforms.ToTensor()]
+    
+        t = transforms.Compose(t)
+        test_dataset = CustomDataset(data_set_path=args.dataset_root, transforms=t)
     class_names = os.walk(args.dataset_root).__next__()[1]
     class_names.sort()
     if "background" in class_names:
@@ -129,37 +158,64 @@ if __name__ == "__main__":
             raise Exception("There is no background dataset")
 
     # prepare model
-    if args.no_background is False:
-        if args.model == 'mobilenetv2':
-            model = mobilenet_v2(custom_class_num = len(class_names) - 1)
-        elif args.model == 'efficientnet-b0':
-            model = efficientnet_b0(custom_class_num = len(class_names) - 1)
-        elif args.model == 'efficientnet-b1':
-            model = efficientnet_b1(custom_class_num = len(class_names) - 1)
+    if args.onnx:
+        args.batch_size = 1
+        import onnxruntime
+        if torch.cuda.is_available():
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        else:
+            providers = ["CPUExecutionProvider"]
+        session = onnxruntime.InferenceSession(args.onnx, providers=providers)
+        output_names = [x.name for x in session.get_outputs()]
+        meta = session.get_modelmeta().custom_metadata_map  # metadata
+        if "stride" in meta:
+            stride, names = int(meta["stride"]), eval(meta["names"])
+    elif args.dx_sim:
+        from dx_simulator import Simulator
+        args.batch_size = 1
+        simulator = Simulator(
+            opt_model_path=os.path.join(args.dx_sim, "opt.model"),
+            pre_model_path=os.path.join(args.dx_sim, "pre.model"),
+            cpu_model_path=os.path.join(args.dx_sim, "cpu.model"),
+            sequence_path=os.path.join(args.dx_sim, "simulator_info.pb"),
+            config_path=args.json,
+            mode="inference",
+        )
+        preprocessor = simulator.get_preprocessing()
     else:
-        if args.model == 'mobilenetv2':
-            model = mobilenet_v2(custom_class_num = len(class_names))
-        elif args.model == 'efficientnet-b0':
-            model = efficientnet_b0(custom_class_num = len(class_names))
-        elif args.model == 'efficientnet-b1':
-            model = efficientnet_b1(custom_class_num = len(class_names))
+        if args.no_background is False:
+            if args.model == 'mobilenetv2':
+                model = mobilenet_v2(custom_class_num = len(class_names) - 1)
+            elif args.model == 'efficientnet-b0':
+                model = efficientnet_b0(custom_class_num = len(class_names) - 1)
+            elif args.model == 'efficientnet-b1':
+                model = efficientnet_b1(custom_class_num = len(class_names) - 1)
+        else:
+            if args.model == 'mobilenetv2':
+                model = mobilenet_v2(custom_class_num = len(class_names))
+            elif args.model == 'efficientnet-b0':
+                model = efficientnet_b0(custom_class_num = len(class_names))
+            elif args.model == 'efficientnet-b1':
+                model = efficientnet_b1(custom_class_num = len(class_names))
 
-    _=load_model(model, source=args.weight, eval=1)
-
-    if torch.cuda.is_available():
-        model = model.cuda()
-    
-    if args.export:
-        export_classificaton_model(args.model, args.input_size, model)
+        _=load_model(model, source=args.weight, eval=1)
+        if args.export:
+            if torch.cuda.is_available():
+                model = model.cuda()
+            export_classificaton_model(args.model, args.input_size, model)
+        if torch.cuda.is_available():
+            model = model.cuda()
+            model = torch.nn.DataParallel(model)
+        model.eval()    # 평가시에는 dropout이 OFF 된다.
 
     print('number of test data : ', len(test_dataset))
     # data loader
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                            batch_size = args.batch_size, drop_last=True, shuffle = True, num_workers = args.num_workers)
+    if args.dx_sim:
+        test_loader=torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, collate_fn=collate)
+    else:
+        test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
+                                                batch_size = args.batch_size, drop_last=True, shuffle = True, num_workers = args.num_workers)
    
-    if torch.cuda.is_available():
-        model = model.to(device)
-        model = torch.nn.DataParallel(model)
 
     metric = Accuracy(topk=args.topk, remove = len(class_names)-1, no_background = args.no_background)
     metric.reset()
@@ -167,7 +223,6 @@ if __name__ == "__main__":
     remainder = len(test_dataset)%args.batch_size
 
     #모델 평가
-    model.eval()    # 평가시에는 dropout이 OFF 된다.
     correct = 0
     background_correct_num = 0
     wrong = 0
@@ -180,10 +235,23 @@ if __name__ == "__main__":
         class_correct = list(0. for i in range(len(class_names)))
         class_total = list(0. for i in range(len(class_names)))        
     for data, target in test_loader:
-        if torch.cuda.is_available():
-            data = data.to(device)
-            target = target.to(device)
-        output = model(data)
+
+        if args.onnx:
+            imgs = data.cpu().numpy()  # torch to numpy
+            outputs = session.run(output_names, {session.get_inputs()[0].name: imgs})
+            output = torch.tensor(outputs[0])
+            target = target.to('cpu')
+        elif args.dx_sim:
+            imgs = data.astype(np.uint8)
+            #  imgs = create_simulator_input(data, preprocessor)
+            outputs = simulator.run(output_names = [simulator.get_outputs()[0].name],  data = {simulator.get_inputs()[0].name : imgs})
+            output = torch.FloatTensor(outputs[0])
+            target = target.to('cpu')
+        else:
+            if torch.cuda.is_available():
+                data = data.to(device)
+                target = target.to(device)
+            output = model(data)
         pred = torch.exp(output)
         top_prob, top_class = pred.topk(topk, 1)
         target_ = target.unsqueeze(1).expand_as(top_class)
@@ -235,7 +303,7 @@ if __name__ == "__main__":
                     class_total[target[i]] += 1
                     class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
                     total += 1
-        metric.match(model(data), target)
+        metric.match(output, target)
     accuracy = metric.get_result()
     # print results
     print("==================================================")

@@ -18,8 +18,8 @@ class EntropicOpenSetLoss():
             if target == self.class_num - 1:
                 # background class
                 for index in range(self.class_num - 1):
-                    #loss -= torch.log(output_softmax[i][index]) * div
-                    loss -= torch.log(1 - output_softmax[i][index])
+                    loss -= torch.log(output_softmax[i][index]) * div
+                    # loss -= torch.log(1 - output_softmax[i][index])
             else:
                 # CELoss
                 loss -= torch.log(output_softmax[i][target])

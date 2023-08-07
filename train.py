@@ -13,6 +13,9 @@ import numpy as np
 from PIL import Image
 from adamp import SGDP
 import torch.nn.functional as F
+
+
+
 def parser():
     parser = argparse.ArgumentParser(description='Classification Training')
 
@@ -28,9 +31,9 @@ def parser():
                         help='Checkpoint state_dict file to resume training from')
     parser.add_argument('--num_workers', default=12, type=int,
                         help='Number of workers used in dataloading')
-    parser.add_argument('--epochs', default=30, type=int,
+    parser.add_argument('--epochs', default=50, type=int,
                         help='Number of epochs to run')
-    parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
+    parser.add_argument('--lr', '--learning-rate', default=1e-2, type=float,
                         help='Initial learning rate')
     parser.add_argument('--momentum', default=0.9, type=float,
                         help='Momentum value for optimizer')
@@ -45,7 +48,7 @@ def parser():
     parser.add_argument('--scheduler', default='multi_step',
                         choices=['plateau','step', 'multi_step','cosine'],
                         type=str.lower, help='Use Scheduler')
-    parser.add_argument('--optimizer', default='adam',
+    parser.add_argument('--optimizer', default='sgd',
                         choices=['adam', 'sgd', 'adamw', 'sgdp'],
                         type=str.lower, help='Use Optimizer')
     parser.add_argument('--loss', default='open',
@@ -55,7 +58,6 @@ def parser():
                         help='input size(width, height)')
     parser.add_argument('--no_background', default=False, action='store_true',
                         help='Use background dataset')
-
 
     args = parser.parse_args()
     return args    
@@ -143,8 +145,7 @@ if __name__ == "__main__":
     t = [transforms.Resize((args.input_size[1], args.input_size[0])),
         transforms.Grayscale(1),
         #rgbtor(),
-        transforms.ToTensor(),
-        transforms.Normalize(0.5,0.5)]
+        transforms.ToTensor()]
     t = transforms.Compose(t)
     train_dataset = CustomDataset(data_set_path=args.train_dataset_root, transforms=t)
     test_dataset = CustomDataset(data_set_path=args.validation_dataset_root, transforms=t)
@@ -246,6 +247,7 @@ if __name__ == "__main__":
     total_cnt = len(train_dataset)
     for epoch in range(epoch, args.epochs):
         for data, target in train_loader:
+            # data /= 255.
             if torch.cuda.is_available():
                 data = data.to(device)
                 target = target.to(device)
@@ -257,8 +259,9 @@ if __name__ == "__main__":
                 loss = criterion(output.to(torch.float32), target.to(torch.float32))
             else:
                 loss = criterion(output, target)
-            loss.backward()
-            optimizer.step()
+            if torch.isfinite(loss): #prevent to go nan
+                loss.backward()
+                optimizer.step()
             cnt +=  args.batch_size
             print("[%d / %d] - loss=%.3f" % (cnt, total_cnt, loss), end='\r')
         print("Train epoch : {}     Loss : {:3f}".format(epoch, loss.item()))
