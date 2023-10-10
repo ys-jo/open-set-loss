@@ -253,6 +253,9 @@ if __name__ == "__main__":
                 target = target.to(device)
             output = model(data)
         pred = torch.exp(output)
+        pred_sum = sum(pred[0])
+        pred /= pred_sum
+        print(pred)
         top_prob, top_class = pred.topk(topk, 1)
         target_ = target.unsqueeze(1).expand_as(top_class)
         c = (top_class == target_).squeeze()
@@ -260,7 +263,7 @@ if __name__ == "__main__":
         if (len(target) < args.batch_size):
             for i in remainder:
                 if args.no_background is False:
-                    if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
+                    if torch.max(pred[i]) < 0.7 and target[i] == len(class_names)-1:
                         correct += 1
                         background_num +=1
                         background_correct_num +=1
@@ -268,22 +271,22 @@ if __name__ == "__main__":
                         wrong +=1 
                         background_num += 1      
                     else:
-                        if torch.argmax(output[i]).eq(target[i]):
-                            correct += torch.argmax(output[i]).eq(target[i])
-                            class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                        if torch.argmax(pred[i]).eq(pred[i]):
+                            correct += torch.argmax(pred[i]).eq(target[i])
+                            class_correct[target[i]] += torch.argmax(pred[i]).eq(target[i])
                         else:
                             wrong += 1
                     class_total[target[i]] += 1
                     total += 1
                 else:
-                    correct += torch.argmax(output[i]).eq(target[i])
+                    correct += torch.argmax(pred[i]).eq(target[i])
                     class_total[target[i]] += 1
-                    class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                    class_correct[target[i]] += torch.argmax(pred[i]).eq(target[i])
                     total += 1
         else:
             for i in range(args.batch_size):
                 if args.no_background is False:
-                    if torch.max(output[i]) < 0.5 and target[i] == len(class_names)-1:
+                    if torch.max(pred[i]) < 0.7 and target[i] == len(class_names)-1:
                         correct += 1
                         background_num +=1
                         background_correct_num +=1
@@ -291,19 +294,19 @@ if __name__ == "__main__":
                         wrong +=1 
                         background_num += 1      
                     else:
-                        if torch.argmax(output[i]).eq(target[i]):
-                            correct += torch.argmax(output[i]).eq(target[i])
-                            class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                        if torch.argmax(pred[i]).eq(target[i]):
+                            correct += torch.argmax(pred[i]).eq(target[i])
+                            class_correct[target[i]] += torch.argmax(pred[i]).eq(target[i])
                         else:
                             wrong += 1
                         class_total[target[i]] += 1
                     total += 1
                 else:
-                    correct += torch.argmax(output[i]).eq(target[i])
+                    correct += torch.argmax(pred[i]).eq(target[i])
                     class_total[target[i]] += 1
-                    class_correct[target[i]] += torch.argmax(output[i]).eq(target[i])
+                    class_correct[target[i]] += torch.argmax(pred[i]).eq(target[i])
                     total += 1
-        metric.match(output, target)
+        metric.match(pred, target)
     accuracy = metric.get_result()
     # print results
     print("==================================================")
